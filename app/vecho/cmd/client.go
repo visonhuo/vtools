@@ -7,6 +7,33 @@ import (
 	"net"
 )
 
+var (
+	IPv4loopback = net.IPv4(127, 0, 0, 1)
+)
+
+var clientFlags = struct {
+	protocol   string
+	listenIP   net.IP
+	listenPort int
+	remoteIP   net.IP
+	remotePort int
+}{}
+
+func init() {
+	clientCmd.Flags().StringVarP(&clientFlags.protocol, "protocol", "p", "tcp",
+		"Protocol of echo server/client, default value: tcp, ranges: tcp/udp/tcp4/udp4/tcp6/tcp6")
+	clientCmd.Flags().IPVarP(&clientFlags.listenIP, "listen_ip", "l", net.IPv4zero,
+		"Listen IP for echo server, default value: (ipv4)0.0.0.0 / (ipv6)[::]")
+	clientCmd.Flags().IntVarP(&clientFlags.listenPort, "listen_port", "L", 0,
+		"Listen port for echo server, default value: 0")
+	clientCmd.Flags().IPVarP(&clientFlags.remoteIP, "remote_ip", "r", IPv4loopback,
+		"Request remote IP for echo client, default value: (ipv1)127.0.0.1 / (ipv6)[::1]")
+	clientCmd.Flags().IntVarP(&clientFlags.remotePort, "remote_port", "R", 80,
+		"Request remote port for echo client, default value: 80")
+
+	rootCmd.AddCommand(clientCmd)
+}
+
 // clientCmd represents the client command
 var clientCmd = &cobra.Command{
 	Use:   "client",
@@ -21,39 +48,43 @@ Command example:
 Write content only example:
 - vecho client echo_content -p=udp -R=54996`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if !isValidProtocol(protocol) {
-			logger.Fatalf("Error: invalid protocol flag value(%v)", protocol)
+		if !isValidProtocol(clientFlags.protocol) {
+			logger.Fatalf("Error: invalid protocol flag value(%v)", clientFlags.protocol)
 		}
 
-		srcIP := net.ParseIP(listenIP)
-		if srcIP == nil {
-			logger.Fatalf("Error: invalid listen IP value(%v)", listenIP)
+		if clientFlags.listenIP == nil {
+			logger.Fatalf("Error: invalid listen IP value(%v)", clientFlags.listenIP)
+		} else if isIPv6Protocol(clientFlags.protocol) && clientFlags.listenIP.Equal(net.IPv4zero) {
+			clientFlags.listenIP = net.IPv6zero
 		}
 
-		if !isValidPort(listenPort) {
-			logger.Fatalf("Error: invalid listen port value(%v)", listenPort)
+		if !isValidPort(clientFlags.listenPort) {
+			logger.Fatalf("Error: invalid listen port value(%v)", clientFlags.listenPort)
 		}
 
-		dstIP := net.ParseIP(remoteIP)
-		if dstIP == nil {
-			logger.Fatalf("Error: invalid remote IP value(%v)", remoteIP)
+		if clientFlags.remoteIP == nil {
+			logger.Fatalf("Error: invalid remote IP value(%v)", clientFlags.remoteIP)
+		} else if isIPv6Protocol(clientFlags.protocol) && clientFlags.remoteIP.Equal(IPv4loopback) {
+			clientFlags.remoteIP = net.IPv6loopback
 		}
 
-		if !isValidPort(remotePort) {
-			logger.Fatalf("Error: invalid remote port value(%v)", remotePort)
+		if !isValidPort(clientFlags.remotePort) {
+			logger.Fatalf("Error: invalid remote port value(%v)", clientFlags.remotePort)
 		}
 
 		// srcPort == listenPort
 		// dstPort == remotePort
-		if err := core.SetupEchoClient(protocol, srcIP, listenPort, dstIP, remotePort, args); err != nil {
+		if err := core.SetupEchoClient(
+			clientFlags.protocol,
+			clientFlags.listenIP,
+			clientFlags.listenPort,
+			clientFlags.remoteIP,
+			clientFlags.remotePort,
+			args,
+		); err != nil {
 			logger.Fatalf("Error: setup echo client failed(%v,%v:%v,%v:%v), err: %v",
-				protocol, srcIP, listenPort, dstIP, remotePort, err)
+				clientFlags.protocol, clientFlags.listenIP, clientFlags.listenPort, clientFlags.remoteIP, clientFlags.remotePort, err)
 		}
-
 		logger.Infof("Vecho client closed~")
 	},
-}
-
-func init() {
-	rootCmd.AddCommand(clientCmd)
 }
