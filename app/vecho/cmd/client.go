@@ -1,10 +1,11 @@
 package cmd
 
 import (
+	"net"
+
 	"github.com/spf13/cobra"
 	"github.com/vtools/app/vecho/core"
 	"github.com/vtools/app/vecho/logger"
-	"net"
 )
 
 var (
@@ -17,6 +18,7 @@ var clientFlags = struct {
 	listenPort int
 	remoteIP   net.IP
 	remotePort int
+	zone       string
 }{}
 
 func init() {
@@ -30,6 +32,8 @@ func init() {
 		"Request remote IP for echo client, default value: (ipv1)127.0.0.1 / (ipv6)[::1]")
 	clientCmd.Flags().IntVarP(&clientFlags.remotePort, "remote_port", "R", 80,
 		"Request remote port for echo client, default value: 80")
+	clientCmd.Flags().StringVarP(&clientFlags.zone, "zone", "z", "",
+		"Address zone for echo client (ipv6 only), default value: en0")
 
 	rootCmd.AddCommand(clientCmd)
 }
@@ -38,20 +42,16 @@ func init() {
 var clientCmd = &cobra.Command{
 	Use:   "client",
 	Short: "Echo client tools",
-	Long: `A tool collection of echo server.
+	Long: `A simple tool collection of echo client (support tcp4/tcp6/udp4/udp6/ip4:udp).
 
 Command example:
 - vecho client --remote_ip=192.168.0.1 --remote_port=54996
-- vecho client --protocol=udp4 --listen_ip=0.0.0.0 --listen_port=64886 --remote_ip=192.168.0.1 --remote_port=54996
+- vecho client --protocol=udp --listen_ip=0.0.0.0 --listen_port=64886 --remote_ip=192.168.0.1 --remote_port=54996
 - vecho client -p=udp -l=0.0.0.0 -L=64886 -r=192.168.0.1 -R=54996
-
-Write content only example:
+- vecho client -p=ip4:udp -L=8888 -R=9999 (Need root permission)
+Fast send mode example:
 - vecho client echo_content -p=udp -R=54996`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if !isValidProtocol(clientFlags.protocol) {
-			logger.Fatalf("Error: invalid protocol flag value(%v)", clientFlags.protocol)
-		}
-
 		if clientFlags.listenIP == nil {
 			logger.Fatalf("Error: invalid listen IP value(%v)", clientFlags.listenIP)
 		} else if isIPv6Protocol(clientFlags.protocol) && clientFlags.listenIP.Equal(net.IPv4zero) {
@@ -72,6 +72,10 @@ Write content only example:
 			logger.Fatalf("Error: invalid remote port value(%v)", clientFlags.remotePort)
 		}
 
+		if isIPv6Protocol(clientFlags.protocol) && clientFlags.zone == "" {
+			serverFlags.zone = "en0"
+		}
+
 		// srcPort == listenPort
 		// dstPort == remotePort
 		if err := core.SetupEchoClient(
@@ -80,6 +84,7 @@ Write content only example:
 			clientFlags.listenPort,
 			clientFlags.remoteIP,
 			clientFlags.remotePort,
+			clientFlags.zone,
 			args,
 		); err != nil {
 			logger.Fatalf("Error: setup echo client failed(%v,%v:%v,%v:%v), err: %v",

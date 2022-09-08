@@ -12,6 +12,7 @@ var serverFlags = struct {
 	protocol   string
 	listenIP   net.IP
 	listenPort int
+	zone       string
 	// extra options
 	reuseAddr bool
 	reusePort bool
@@ -24,6 +25,8 @@ func init() {
 		"Listen IP for echo server, default value: (ipv4)0.0.0.0 / (ipv6)[::]")
 	serverCmd.Flags().IntVarP(&serverFlags.listenPort, "listen_port", "L", 0,
 		"Listen port for echo server, default value: 0")
+	serverCmd.Flags().StringVarP(&serverFlags.zone, "zone", "z", "",
+		"Address zone for echo server (ipv6 only), default value: en0")
 	serverCmd.Flags().BoolVarP(&serverFlags.reuseAddr, "reuse_addr", "", false,
 		"Set SO_REUSERADDR sock option value")
 	serverCmd.Flags().BoolVarP(&serverFlags.reusePort, "reuse_port", "", false,
@@ -36,17 +39,15 @@ func init() {
 var serverCmd = &cobra.Command{
 	Use:   "server",
 	Short: "Echo server tools",
-	Long: `A tool collection of echo server.
+	Long: `A simple tool collection of echo server. (support tcp4/tcp6/udp4/udp6)
 
 Command example:
-- vecho server --protocol=tcp --listen_ip=127.0.0.1 
+- vecho server --protocol=tcp --listen_ip=127.0.0.1
 - vecho server --protocol=udp --listen_ip=0.0.0.0 --listen_port=64886
-- vecho server -p=udp -l=0.0.0.0 -L=64886`,
+- vecho server --protocol=udp6 --listen_ip=fe80::8c:574d:b224:3f2f --listen_port=64886 --zone=en0
+- vecho server -p=udp6 -l=fe80::8c:574d:b224:3f2f -L=64886 -z=en0
+`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if !isValidProtocol(serverFlags.protocol) {
-			logger.Fatalf("Error: invalid protocol flag value(%v)", serverFlags.protocol)
-		}
-
 		if serverFlags.listenIP == nil {
 			logger.Fatalf("Error: invalid listen IP value(%v)", serverFlags.listenIP)
 		} else if isIPv6Protocol(serverFlags.protocol) && serverFlags.listenIP.Equal(net.IPv4zero) {
@@ -58,10 +59,15 @@ Command example:
 			logger.Fatalf("Error: invalid listen port value(%v)", serverFlags.listenPort)
 		}
 
+		if isIPv6Protocol(serverFlags.protocol) && serverFlags.zone == "" {
+			serverFlags.zone = "en0"
+		}
+
 		if err := core.SetupEchoServer(
 			serverFlags.protocol,
 			serverFlags.listenIP,
 			serverFlags.listenPort,
+			serverFlags.zone,
 			core.WithReuseAddr(serverFlags.reuseAddr),
 			core.WithReusePort(serverFlags.reusePort),
 		); err != nil {

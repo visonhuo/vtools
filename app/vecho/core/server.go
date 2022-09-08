@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"errors"
+	"fmt"
 	"io"
 	"net"
 	"syscall"
@@ -12,7 +12,7 @@ import (
 	"github.com/vtools/app/vecho/logger"
 )
 
-func SetupEchoServer(protocol string, srcIP net.IP, srcPort int, opts ...SockOption) error {
+func SetupEchoServer(protocol string, srcIP net.IP, srcPort int, zone string, opts ...SockOption) error {
 	// setup options and build listen config
 	newSockOptions := defaultSockOptions()
 	for _, opt := range opts {
@@ -26,16 +26,16 @@ func SetupEchoServer(protocol string, srcIP net.IP, srcPort int, opts ...SockOpt
 
 	switch protocol {
 	case "tcp", "tcp4", "tcp6":
-		return setupEchoServerTCP(listenCfg, protocol, srcIP, srcPort)
+		return setupEchoServerTCP(listenCfg, protocol, srcIP, srcPort, zone)
 	case "udp", "udp4", "udp6":
-		return setupEchoServerUDP(listenCfg, protocol, srcIP, srcPort)
+		return setupEchoServerUDP(listenCfg, protocol, srcIP, srcPort, zone)
 	default:
-		return errors.New("unknown protocol")
+		return fmt.Errorf("invalid protocol(%v)", protocol)
 	}
 }
 
-func setupEchoServerTCP(listenCfg *net.ListenConfig, protocol string, srcIP net.IP, srcPort int) error {
-	address := &net.TCPAddr{IP: srcIP, Port: srcPort}
+func setupEchoServerTCP(listenCfg *net.ListenConfig, protocol string, srcIP net.IP, srcPort int, zone string) error {
+	address := &net.TCPAddr{IP: srcIP, Port: srcPort, Zone: zone}
 	listener, err := listenCfg.Listen(context.TODO(), protocol, address.String())
 	if err != nil {
 		return err
@@ -80,8 +80,8 @@ func setupEchoServerTCP(listenCfg *net.ListenConfig, protocol string, srcIP net.
 	}
 }
 
-func setupEchoServerUDP(listenCfg *net.ListenConfig, protocol string, srcIP net.IP, srcPort int) error {
-	address := &net.UDPAddr{IP: srcIP, Port: srcPort}
+func setupEchoServerUDP(listenCfg *net.ListenConfig, protocol string, srcIP net.IP, srcPort int, zone string) error {
+	address := &net.UDPAddr{IP: srcIP, Port: srcPort, Zone: zone}
 	conn, err := listenCfg.ListenPacket(context.TODO(), protocol, address.String())
 	if err != nil {
 		return err
